@@ -16,7 +16,7 @@ def omps_l3_daily_o3_pairing(model_data,obs_data,ozone_ppbv_varname):
     column = (du_fac*(model_data['dp_pa']/100.)*model_data[ozone_ppbv_varname]).sum('z')
     
     # initialize regrid and apply to column data
-    grid_adjust = xe.Regridder(model_data[['latitude','longitude']],obs_data[['latitude','longitude']],'bilinear')
+    grid_adjust = xe.Regridder(model_data[['latitude','longitude']],obs_data[['latitude','longitude']],'bilinear',periodic=True)
     mod_col_obsgrid = grid_adjust(column)
     # Aggregate time-step to daily means
     daily_mean = mod_col_obsgrid.groupby('time.date').mean()
@@ -51,7 +51,7 @@ def space_and_time_pairing(model_data,obs_data,pair_variables):
         if len(tindex):
             # initialize spatial regridder (model lat/lon to satellite swath lat/lon)
             # dimensions of new variables will be (time, z, satellite_x, satellite_y)
-            regridr = xe.Regridder(model_data.isel(time=f),obs_data[['latitude','longitude']].sel(x=tindex),'bilinear') # standard bilinear spatial regrid. 
+            regridr = xe.Regridder(model_data.isel(time=f),obs_data[['latitude','longitude']].sel(x=tindex),'bilinear',periodic=True) # standard bilinear spatial regrid. 
             
             # regrid for each variable in pair_variables
             for j in pair_variables:

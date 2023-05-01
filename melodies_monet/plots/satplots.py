@@ -204,7 +204,8 @@ def make_timeseries(df, df_reg=None,column=None, label=None, ax=None, avg_window
         plot_dict['ylim'] = [vmin,vmax]
     #scale the fontsize for the x and y labels by the text_kwargs
     plot_dict['fontsize'] = text_kwargs['fontsize']*0.8
-    
+    dim_lst = list(df.dims)
+    dim_lst.remove('time')
     #Then, if no plot has been created yet, create a plot and plot the obs.
     if ax is None: 
         #First define the colors for the observations.
@@ -223,11 +224,15 @@ def make_timeseries(df, df_reg=None,column=None, label=None, ax=None, avg_window
         print(plot_kwargs)
         # {'color': 'k', 'linestyle': '-', 'marker': '*', 'linewidth': 2.0, 'markersize': 10.0, 'label': 'omps_nm', 'fontsize': 14.4}
         if avg_window is None:
-            df[column].mean('y').plot(ax=ax, color=plot_kwargs['color'],linestyle=plot_kwargs['linestyle'],\
+            print(df[column].mean(dim='y'))
+            df[column].mean(dim='y').plot(x='time',ax=ax, color=plot_kwargs['color'],linestyle=plot_kwargs['linestyle'],\
                                            marker=plot_kwargs['marker'],linewidth=plot_kwargs['linewidth'],\
                                           markersize=plot_kwargs['markersize'],label=plot_kwargs['label'])
         else:
-            df[column].resample(time = avg_window).mean().mean('y').plot(ax=ax,color=plot_kwargs['color'],\
+            
+            #print(df[column].resample(time = avg_window,restore_coord_dims=True).mean().mean(dim='y'))
+            df[column].resample(time = avg_window,
+                                restore_coord_dims=True).mean().mean(dim=dim_lst).plot(x='time',ax=ax,color=plot_kwargs['color'],\
                                                                               linestyle=plot_kwargs['linestyle'],\
                                            marker=plot_kwargs['marker'],linewidth=plot_kwargs['linewidth'],\
                                           markersize=plot_kwargs['markersize'],label=plot_kwargs['label'])
@@ -236,11 +241,12 @@ def make_timeseries(df, df_reg=None,column=None, label=None, ax=None, avg_window
     else:
         # this means that an axis handle already exists and use it to plot the model output.
         if avg_window is None:
-            df[column].mean('y').plot(ax=ax, color=plot_dict['color'],linestyle=plot_dict['linestyle'],\
+            df[column].mean(dim='y').plot(x='time',ax=ax, color=plot_dict['color'],linestyle=plot_dict['linestyle'],\
                                            marker=plot_dict['marker'],linewidth=plot_dict['linewidth'],\
                                           markersize=plot_dict['markersize'],label=plot_dict['label'])
         else:
-            df[column].resample(time=avg_window).mean().mean('y').plot(ax=ax, color=plot_dict['color'],\
+            df[column].resample(time=avg_window,
+                                restore_coord_dims=True).mean().mean(dim_lst).plot(x='time',ax=ax, color=plot_dict['color'],\
                                                                             linestyle=plot_dict['linestyle'],\
                                            marker=plot_dict['marker'],linewidth=plot_dict['linewidth'],\
                                           markersize=plot_dict['markersize'],label=plot_dict['label'])   
@@ -692,7 +698,6 @@ def make_spatial_bias_gridded(df, column_o=None, label_o=None, column_m=None,
     
     #Take the difference for the model output - the sat output
     diff_mod_min_obs = (df[column_o] - df[column_m]).squeeze()
-
     
     #Determine the domain
     if domain_type == 'all' and domain_name == 'CONUS':
@@ -723,7 +728,8 @@ def make_spatial_bias_gridded(df, column_o=None, label_o=None, column_m=None,
     #First determine colorbar
     if vmin == None and vmax == None:
         #vmin = vmodel_mean.quantile(0.01)
-        vmax = np.max((np.abs(diff_mod_min_obs.quantile(0.99)),np.abs(diff_mod_min_obs.quantile(0.01))))
+        vmax = np.max((np.abs(diff_mod_min_obs.chunk(dict(time=-1)).quantile(0.99)),
+                       np.abs(diff_mod_min_obs.chunk(dict(time=-1)).quantile(0.01))))
         vmin = -vmax
         
     if nlevels == None:
@@ -732,9 +738,13 @@ def make_spatial_bias_gridded(df, column_o=None, label_o=None, column_m=None,
     clevel = np.linspace(vmin,vmax,nlevels)
     cmap = mpl.cm.get_cmap('bwr',nlevels-1) 
     norm = mpl.colors.BoundaryNorm(clevel, ncolors=cmap.N, clip=False)
-        
+    
     #I add extend='both' here because the colorbar is setup to plot the values outside the range
     ax = monet.plots.mapgen.draw_map(crs=map_kwargs['crs'],extent=map_kwargs['extent'])
+    
+    #Take mean over time
+    if len(diff_mod_min_obs.dims) == 3:
+        diff_mod_min_obs = diff_mod_min_obs.mean('time')
     # draw scatter plot of model and satellite differences
     c = ax.axes.scatter(df.longitude,df.latitude,c=diff_mod_min_obs,cmap=cmap,s=2,norm=norm)
     plt.gcf().canvas.draw() 

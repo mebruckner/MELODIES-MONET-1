@@ -1,0 +1,11 @@
+Declaration separately of additional variables needed for pairing in yaml?
+- this would help for pairing + column calculation; allow for fix of pair variable names hardwire in OMPS NM O3 pair
+
+Option for renaming model variable in plotting or pairing
+- users may need to rename the model variable post calculation of something like a column
+
+Was able to implement a switch for using satplots vs surfplots. Just needed to add a couple of ifs. However, calls to first plot group and if is a pt_sfc. This would cause issues if mixing satellite and surface networks in same workflow.
+
+Trying to work out merge issues and hope to submit pull request soon.
+
+Question regarding dataset structure: Are there constraints on order of dimensions, or is it not an issue? (eg. location of vertical dim in (time,z,lat,lon))

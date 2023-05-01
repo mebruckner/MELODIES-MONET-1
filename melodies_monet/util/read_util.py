@@ -52,7 +52,6 @@ def read_saved_data(analysis, filenames, method, attr, xr_kws={}):
                     raise FileNotFoundError('No such file: ', filenames[group])
         else:
             raise TypeError('NetCDF format filenames need to be specified as a dict, with format {group1:str or iterable of filenames, group2:...}')
-    
     # Set analysis.read such that it now contains expanded filenames so user has list of read files
     expanded_filenames = getattr(analysis,'read')
     expanded_filenames[attr]['filenames'] = files 
@@ -137,12 +136,20 @@ def read_analysis_ncf(filenames,xr_kws={}):
             if count==0:
                 ds_out = xr.open_dataset(file,**xr_kws)
                 group_name1 =  ds_out.attrs['group_name']
+                if 'time' not in ds_out.dims:
+                    ds_out = ds_out.swap_dims({'x':'time'})
+                    print(ds_out)
             else:
+                print('appending')
+                
                 ds_append = xr.open_dataset(file,**xr_kws)
+                if 'time' not in ds_append.dims:
+                    ds_append = ds_append.swap_dims({'x':'time'})
                 # Test if all the files have the same group to prevent merge issues
                 if group_name1 != ds_append.attrs['group_name']:
                     raise Exception('The group names are not consistent between the netcdf files being read.') 
                 else:
+                    print(ds_out.dims,ds_append.dims)
                     ds_out = xr.merge([ds_out,ds_append])
             
     return ds_out

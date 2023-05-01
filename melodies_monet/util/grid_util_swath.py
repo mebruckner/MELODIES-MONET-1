@@ -2,6 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+#MEB: updating for data that is 2d arrays not 1d arrays,
+#     has 1d time, 2d lats/lons
+
 """
 file: grid_util.py
 """
@@ -31,24 +34,30 @@ def update_sparse_data_grid(time_edges, x_edges, y_edges,
     Returns
         None
     """
+    odim1,odim2 = data_obs.shape
+    
     time_del = time_edges[1] - time_edges[0]
     x_del = x_edges[1] - x_edges[0]
     y_del = y_edges[1] - y_edges[0]
     ntime, nx, ny = len(time_edges) - 1, len(x_edges) - 1, len(y_edges) - 1
-    for i in range(len(data_obs)):
-        if not np.isnan(data_obs[i]):
+    for i in range(odim1):
+        # check that row contains data
+        if not data_obs[i].isnull().all():
             i_time = math.floor((time_obs[i] - time_edges[0]) / time_del)
-            i_x = math.floor((x_obs[i] - x_edges[0]) / x_del)
-            i_y = math.floor((y_obs[i] - y_edges[0]) / y_del)
-            i_time = np.clip(i_time, 0, ntime - 1)
-            i_x = np.clip(i_x, 0, nx - 1)
-            i_y = np.clip(i_y, 0, ny - 1)
-            if (i_time, i_x, i_y) in count_grid.keys():
-                count_grid[(i_time, i_x, i_y)] += 1
-                data_grid[(i_time, i_x, i_y)] += data_obs[i].values
-            else:
-                count_grid[(i_time, i_x, i_y)] = 1
-                data_grid[(i_time, i_x, i_y)] = data_obs[i].values
+            for j in range(odim2):
+                # check that point contains data
+                if not np.isnan(data_obs[i,j]):
+                    i_x = math.floor((x_obs[i,j] - x_edges[0]) / x_del)
+                    i_y = math.floor((y_obs[i,j] - y_edges[0]) / y_del)
+                    i_time = np.clip(i_time, 0, ntime - 1)
+                    i_x = np.clip(i_x, 0, nx - 1)
+                    i_y = np.clip(i_y, 0, ny - 1)
+                    if (i_time, i_x, i_y) in count_grid.keys():
+                        count_grid[(i_time, i_x, i_y)] += 1
+                        data_grid[(i_time, i_x, i_y)] += data_obs[i,j].values
+                    else:
+                        count_grid[(i_time, i_x, i_y)] = 1
+                        data_grid[(i_time, i_x, i_y)] = data_obs[i,j].values
 
 
 def normalize_sparse_data_grid(count_grid, data_grid):
@@ -116,20 +125,28 @@ def update_data_grid(time_edges, x_edges, y_edges,
     Returns
         None
     """
+    odim1,odim2 = data_obs.shape
     time_del = time_edges[1] - time_edges[0]
     x_del = x_edges[1] - x_edges[0]
     y_del = y_edges[1] - y_edges[0]
     ntime, nx, ny = data_grid.shape
-    for i in range(len(data_obs)):
-        if not np.isnan(data_obs[i]):
+    
+    for i in range(odim1):
+        # check that row contains data
+        if not data_obs[i].isnull().all():
             i_time = math.floor((time_obs[i] - time_edges[0]) / time_del)
-            i_x = math.floor((x_obs[i] - x_edges[0]) / x_del)
-            i_y = math.floor((y_obs[i] - y_edges[0]) / y_del)
-            i_time = np.clip(i_time, 0, ntime - 1)
-            i_x = np.clip(i_x, 0, nx - 1)
-            i_y = np.clip(i_y, 0, ny - 1)
-            count_grid[i_time, i_x, i_y] += 1
-            data_grid[i_time, i_x, i_y] += data_obs[i]
+            for j in range(odim2):
+                # check that point contains data
+                if not np.isnan(data_obs[i,j]):
+                    i_x = math.floor((x_obs[i,j] - x_edges[0]) / x_del)
+                    i_y = math.floor((y_obs[i,j] - y_edges[0]) / y_del)
+                    i_time = np.clip(i_time, 0, ntime - 1)
+                    i_x = np.clip(i_x, 0, nx - 1)
+                    i_y = np.clip(i_y, 0, ny - 1)
+                    
+                    count_grid[(i_time, i_x, i_y)] += 1
+                    data_grid[(i_time, i_x, i_y)] += data_obs[i,j].values
+    
 
 
 def normalize_data_grid(count_grid, data_grid):
@@ -146,32 +163,3 @@ def normalize_data_grid(count_grid, data_grid):
     data_grid[count_grid == 0] = np.nan
     data_grid[count_grid > 0] /= count_grid[count_grid > 0]
 
-
-def generate_uniform_grid(paired_dims,start,end,obstime,ntime,nlat,nlon):
-    import pandas as pd
-    #import xarray as xr
-    
-    start_timestamp = pd.to_datetime(start).timestamp()
-    end_timestamp = pd.to_datetime(end).timestamp()
-    time_stamps = [float(t.timestamp()) for t in obstime]
-    time_stamps = np.array(time_stamps)[:,None]*np.ones((paired_dims['x'],paired_dims['y'])) 
-
-    ntime = ntime
-    nlat = nlat
-    nlon = nlon
-    lon0 = -180
-
-    # generate uniform grid
-    time_edges = np.linspace(start_timestamp, end_timestamp, ntime+1, endpoint=True, dtype=float)
-    time_grid = 0.5 * (time_edges[0:ntime] + time_edges[1:ntime+1])
-    lat_edges = np.linspace(-90, 90, nlat+1, endpoint=True, dtype=float)
-    lat_grid = 0.5 * (lat_edges[0:nlat] + lat_edges[1:nlat+1])
-    lat_min, lat_max = lat_edges[0:nlat], lat_edges[1:nlat+1]
-    lon_edges = np.linspace(lon0, lon0 + 360, nlon+1, endpoint=True, dtype=float)
-    lon_grid = 0.5 * (lon_edges[0:nlon] + lon_edges[1:nlon+1])
-    
-    grid = {'longitude':lon_grid,
-                        'latitude':lat_grid,
-                        'time':time_grid}  
-    edges = {'time_edges':time_edges,'lon_edges':lon_edges,'lat_edges':lat_edges}
-    return grid,edges,time_stamps

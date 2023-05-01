@@ -1,0 +1,67 @@
+import xesmf as xe
+import numpy as np
+from datetime import datetime,timedelta
+
+
+def space_and_time_pairing(model_data,obs_data,pair_variables):
+    '''Bilinear spatial and temporal satellite pairing code. 
+    Assumes model data has (time,pressure,latitude,longitude) dimensions.
+    Assumes observation data contains fields named time, pressure, latiutde, and longitude.
+    
+    
+    *** need to make setup work for surface/1z fields, as some pairing requires surface pressure field *** 
+    '''
+    import xesmf as xe
+    mod_nf,mod_nz,mod_nx,mod_ny = model_data[pair_variables[0]].shape # assumes model data is structured (time,z,lon,lat). lon/lat dimension order likely unimportant
+    obs_nz = obs_data['pressure'].shape # assumes 1d pressure field in observation set
+    obs_nx,obs_ny = obs_data['longitude'].shape # assumes 2d lat/lon fields in observation ser
+    
+    # initialize dictionary and arrays for interpolated model data
+    ds = {i:np.zeros((mod_nz,obs_nx,obs_ny)) for i in pair_variables}
+    
+    # loop over model time steps
+    for f in range(mod_nf):
+        
+        # set index for observation data less than 1 model timestep from working model file.
+        tindex = np.where(np.abs(obs_data.time - model_data.time[f]) <= (model_data.time[1]-model_data.time[0]))[0]
+        
+        # if there is observation data within the selected time range, proceed with pairing
+        if len(tindex):
+            # initialize spatial regridder (model lat/lon to satellite swath lat/lon)
+            # dimensions of new variables will be (time, z, satellite_x, satellite_y)
+            regridr = xe.Regridder(model_data.isel(time=f),obs_data[['latitude','longitude']].sel(x=tindex),'bilinear') # standard bilinear spatial regrid. 
+            
+            # regrid for each variable in pair_variables
+            for j in pair_variables:
+                interm_var = regridr(model_data[j][f])
+                
+                # apply  time interpolation
+                if f == (mod_nf-1):
+                #    print('last')
+                    t2 = np.where((obs_data.time[tindex] >= model_data.time[f]))[0]
+                    ds[j][:,tindex[t2]] = interm_var[:,t2].values
+
+                    tind_2 = np.where((obs_data.time[tindex] < model_data.time[f]) & 
+                                      (np.abs(obs_data.time[tindex] - model_data.time[f]) <= (model_data.time[1]-model_data.time[0])))[0]
+                    tfac1 = 1-(np.abs(model_data.time[f] - obs_data.time[tindex[tind_2]])/(model_data.time[1]-model_data.time[0]))
+
+                    ds[j][:,tindex[tind_2]] += np.expand_dims(tfac1.values,axis=1)*interm_var[:,tind_2].values
+                
+                elif f == (0):
+                #    print('first')
+                    t2 = np.where((obs_data.time[tindex] <= model_data.time[f]))[0]
+                    ds[j][:,tindex[t2],:] = interm_var[:,t2].values
+                    
+                    tind_2 = np.where((obs_data.time[tindex] > model_data.time[f]) & 
+                                      (np.abs(obs_data.time[tindex] - model_data.time[f]) <= (model_data.time[1]-model_data.time[0])))[0]
+                    tfac1 = 1-(np.abs(model_data.time[f] - obs_data.time[tindex[tind_2]])/(model_data.time[1]-model_data.time[0]))
+
+                    ds[j][:,tindex[tind_2],:] += np.expand_dims(tfac1.values,axis=1)*interm_var[:,tind_2,:].values
+                   
+                else:
+
+
+                    tfac1 = 1-(np.abs(model_data.time[f] - obs_data.time[tindex])/(model_data.time[1]-model_data.time[0]))
+                    
+                    ds[j][:,tindex,:] += np.expand_dims(tfac1.values,axis=1)*interm_var.values
+    return ds
